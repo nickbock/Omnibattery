@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from custom_components.omnibattery.pricing.chronological import EnergyInterval
 from custom_components.omnibattery.pricing.solar_timeline import (
     build_boundaries,
     build_solar_timeline,
@@ -269,3 +270,22 @@ def test_legacy_positional_shape_is_used_only_for_the_exact_horizon():
     )
     assert invalid.source == "sinusoidal"
     assert "legacy_shape_length" in (invalid.fallback_reason or "")
+
+
+@pytest.mark.parametrize(
+    "start",
+    [
+        datetime(2026, 10, 24, 15, 0, tzinfo=ZoneInfo("Europe/Amsterdam")),
+        datetime(2027, 3, 27, 15, 0, tzinfo=ZoneInfo("Europe/Amsterdam")),
+    ],
+)
+def test_dst_boundaries_build_energy_intervals_in_absolute_order(start: datetime):
+    """Regression #678: the repeated fall-back hour ran backwards in wall time."""
+    boundaries = build_boundaries(start, start + timedelta(days=2))
+    intervals = [EnergyInterval(begin, end, 0.1, 0.0) for begin, end in boundaries]
+
+    assert all(end > begin for begin, end in boundaries)
+    assert sorted(intervals, key=lambda item: item.start) == intervals
+    assert sum((item.end - item.start).total_seconds() for item in intervals) == pytest.approx(
+        (start + timedelta(days=2)).timestamp() - start.timestamp()
+    )

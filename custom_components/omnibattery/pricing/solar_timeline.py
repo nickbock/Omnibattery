@@ -103,6 +103,17 @@ def build_boundaries(
             # the derived energy deadlines remain comparable with those slots.
             segment_start = segment_start.replace(tzinfo=None)
             segment_finish = segment_finish.replace(tzinfo=None)
+        else:
+            # Datetimes sharing a ZoneInfo compare and subtract by wall clock,
+            # so the repeated DST hour would run backwards (02:45 -> 02:00).
+            # A fixed offset per boundary keeps local wall time and makes
+            # every comparison absolute.
+            segment_start = segment_start.replace(
+                tzinfo=timezone(segment_start.utcoffset())
+            )
+            segment_finish = segment_finish.replace(
+                tzinfo=timezone(segment_finish.utcoffset())
+            )
         result.append((segment_start, segment_finish))
         cursor = segment_end
     return result

@@ -1936,6 +1936,60 @@ def test_extended_chronological_plan_uses_consumption_shape_by_date():
     ]
 
 
+@pytest.mark.parametrize(
+    ("now", "night_hours"),
+    [
+        # Fall-back: 02:00-03:00 happens twice (regression #678).
+        (datetime(2026, 10, 24, 22, 0, tzinfo=ZoneInfo("Europe/Amsterdam")), 3),
+        # Spring-forward: 02:00-03:00 does not exist.
+        (datetime(2027, 3, 27, 22, 0, tzinfo=ZoneInfo("Europe/Amsterdam")), 1),
+    ],
+)
+def test_extended_projection_survives_dst_night(now, night_hours):
+    """The dashboard projection must plan across a DST night, not fall back."""
+    forecast = ConsumptionForecast(10.0, [0.1] * INTERVAL_COUNT, "profile", True)
+    tracker = SimpleNamespace(
+        consumption_profile=SimpleNamespace(),
+        forecast_consumption_between=lambda *_args, **_kwargs: forecast,
+    )
+    ctrl = _controller(
+        _consumption_tracker=tracker,
+        solar_profile_mode="off",
+        _predictive_safety_margin_kwh=0.0,
+        coordinators=[],
+        _is_battery_manual_owned=lambda _coordinator: False,
+        max_contracted_power=0.0,
+        max_charge_capacity=0.0,
+    )
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+
+    projection = _mgr(ctrl).build_extended_chronological_projection(
+        now=now,
+        slots=[],
+        base_decision_data={
+            "avg_consumption_kwh": 1.0,
+            "solar_forecast_input": SolarForecastInput(0.0, "none"),
+        },
+        price_ceiling=None,
+        horizon_end=midnight + timedelta(hours=12),
+    )
+    plan = projection.plan
+
+    assert plan is not None
+    starts = [item.start.timestamp() for item in plan.intervals]
+    assert starts == sorted(starts)
+    assert all(item.end > item.start for item in plan.intervals)
+    # 01:00-04:00 wall clock lasts 4 real hours in autumn and 2 in spring.
+    night = [
+        item for item in plan.intervals
+        if item.start.date() == midnight.date() and 1 <= item.start.hour < 4
+    ]
+    assert sum((item.end - item.start).total_seconds() for item in night) == (
+        (night_hours + 1) * 3600
+    )
+    assert sum(item.consumption_kwh for item in plan.intervals) == pytest.approx(10.0)
+
+
 def test_extended_projection_adapter_is_read_only_for_dashboard_callers():
     """A visual cross-midnight projection cannot alter predictive runtime state."""
     madrid = ZoneInfo("Europe/Madrid")
