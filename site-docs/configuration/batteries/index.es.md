@@ -13,6 +13,7 @@ Elige la vía que coincida con tu batería y con cómo está conectada a Home As
 | Sessy Home Battery | Un dongle Sessy accesible y sus credenciales | **Sessy** | [Sessy](sessy.md) |
 | Hoymiles MS-A2 o HiBattery compatible | MQTT configurado en Home Assistant y el ID completo del dispositivo | **Hoymiles MQTT** | [Hoymiles MQTT](hoymiles.md) |
 | Huawei SUN2000 con LUNA2000 | Un extremo Modbus TCP y Huawei Solar o escrituras Modbus directas | **Huawei SUN2000 + LUNA2000** | [Huawei](huawei.md) |
+| Zinvolt | La integración Zinvolt de Home Assistant, Home Assistant 2026.11 o posterior | **Zinvolt (Home Assistant integration)** | [Zinvolt](zinvolt.md) |
 
 ![Selector de marca de batería](../../assets/screenshots/configuration/battery-brand-form.png){ width="650" style="display: block; margin: 0 auto;" }
 

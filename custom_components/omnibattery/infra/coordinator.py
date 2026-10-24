@@ -25,6 +25,7 @@ from ..drivers.marstek import MarstekModbusDriver
 from ..drivers.zendure import ZendureLocalDriver, ZENDURE_MODEL_2400AC_PRO
 from ..drivers.anker import AnkerModbusDriver
 from ..drivers.sessy import SessyLocalDriver
+from ..drivers.zinvolt import ZinvoltEntityDriver
 from ..drivers.hoymiles import HoymilesMqttDriver
 from ..drivers.huawei import HuaweiSolarDriver
 from ..drivers.base import SetpointResult
@@ -324,6 +325,7 @@ class MarstekVenusDataUpdateCoordinator(DataUpdateCoordinator):
                  rs485_gateway: bool = False,
                  esphome_device_id: str | None = None,
                  huawei_battery_device_id: str | None = None,
+                 zinvolt_device_id: str | None = None,
                  huawei_direct_write: bool = False,
                  huawei_emma_slave_id: int | None = None,
                  username: str = "",
@@ -364,7 +366,7 @@ class MarstekVenusDataUpdateCoordinator(DataUpdateCoordinator):
         self.brand = brand
         self.ems_version = ems_version
         self.zendure_model = zendure_model
-        if self.brand in ("zendure", "anker", "hoymiles", "huawei"):
+        if self.brand in ("zendure", "anker", "hoymiles", "huawei", "zinvolt"):
             full_charge_voltage_taper_enabled = False
 
         # Validate and store battery version
@@ -544,6 +546,15 @@ class MarstekVenusDataUpdateCoordinator(DataUpdateCoordinator):
                 battery_device_id=huawei_battery_device_id or "",
                 direct_write=huawei_direct_write,
                 emma_slave_id=huawei_emma_slave_id,
+                max_charge_power_w=self.configured_max_charge_power,
+                max_discharge_power_w=self.configured_max_discharge_power,
+            )
+        elif self.brand == "zinvolt":
+            # Cloud battery behind the core zinvolt integration; host carries
+            # its device registry id, as for ESPHome.
+            self.driver = ZinvoltEntityDriver(
+                hass,
+                zinvolt_device_id or self.host,
                 max_charge_power_w=self.configured_max_charge_power,
                 max_discharge_power_w=self.configured_max_discharge_power,
             )
@@ -888,6 +899,7 @@ class MarstekVenusDataUpdateCoordinator(DataUpdateCoordinator):
                 else "Sessy" if self.brand == "sessy"
                 else "Hoymiles" if self.brand == "hoymiles"
                 else "Huawei" if self.brand == "huawei"
+                else "Zinvolt" if self.brand == "zinvolt"
                 else "Marstek"
             ),
             "model": self.driver.model_label or (

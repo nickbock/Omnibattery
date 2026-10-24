@@ -169,6 +169,18 @@
           "esphome_device": "El dispositiu LilyGo T-CAN485 amb el firmware ESPHome de Marstek"
         }
       },
+      "battery_connection_zinvolt": {
+        "title": "Configura la bateria {battery_num} — Connexió (Zinvolt)",
+        "description": "Selecciona la bateria Zinvolt de la integració Zinvolt de Home Assistant per a la bateria {battery_num}. Requereix Home Assistant 2026.11 o posterior. Desactiva altres automatitzacions que canviïn el mode o els límits de potència de Zinvolt.",
+        "data": {
+          "name": "Nom",
+          "zinvolt_device": "Dispositiu Zinvolt"
+        },
+        "data_description": {
+          "name": "Nom descriptiu per identificar aquesta bateria",
+          "zinvolt_device": "El dispositiu de bateria creat per la integració Zinvolt (no una unitat de pack)"
+        }
+      },
       "battery_limits": {
         "title": "Configura la bateria {battery_num} — Límits",
         "description": "Introdueix els límits de potència i SOC de la bateria {battery_num}.",
@@ -653,6 +665,18 @@
           "esphome_device": "El dispositiu LilyGo T-CAN485 amb el firmware ESPHome de Marstek"
         }
       },
+      "reconfigure_battery_zinvolt": {
+        "title": "Reconfigura la bateria {battery_num} — Connexió (Zinvolt)",
+        "description": "Actualitza el dispositiu Zinvolt de la bateria {battery_num}. La resta de paràmetres es conserva.",
+        "data": {
+          "name": "Nom",
+          "zinvolt_device": "Dispositiu Zinvolt"
+        },
+        "data_description": {
+          "name": "Nom descriptiu per identificar aquesta bateria",
+          "zinvolt_device": "El dispositiu de bateria creat per la integració Zinvolt (no una unitat de pack)"
+        }
+      },
       "restore_backup": {
         "title": "Restaura la configuració anterior",
         "description": "S'ha trobat una còpia de seguretat de {count} configuració(ns) anterior(s) (connexió, opcions i ajust). Vols restaurar-la per recuperar-ho tot sense tornar a configurar? Les teves entitats i historial es reconnectaran automàticament.",
@@ -702,6 +726,7 @@
       "huawei_solar_missing": "Without direct Modbus writes, Omnibattery controls the battery through the Huawei Solar integration's services — but that integration is not set up here. Install and configure it via HACS, or enable direct writes.",
       "huawei_device_mismatch": "The chosen battery device belongs to a different inverter than the Modbus address points at. With cascaded inverters the readings would come from one unit while the commands landed on another. Check the device and the slave id.",
       "esphome_entities_missing": "Al dispositiu ESPHome seleccionat li falten entitats necessàries: {missing}. Assegura't que executa el firmware marstek-lilygo-rs485 amb els noms d'entitat originals.",
+      "zinvolt_entities_missing": "Al dispositiu Zinvolt seleccionat li falten entitats necessàries: {missing}. Selecciona el dispositiu principal de la bateria, fes servir Home Assistant 2026.11 o posterior i activa aquestes entitats.",
       "sensor_not_found": "El sensor de predicció solar no existeix. Verifica que el sensor estigui disponible.",
       "invalid_unit": "El sensor de predicció solar ha de tenir com a unitat 'kWh' o 'Wh'.",
       "solar_production_sensor_not_found": "El sensor de producció solar no existeix. Verifica que el sensor estigui disponible.",
@@ -890,6 +915,18 @@
         "data_description": {
           "name": "Nom descriptiu per identificar aquesta bateria",
           "esphome_device": "El dispositiu LilyGo T-CAN485 amb el firmware ESPHome de Marstek"
+        }
+      },
+      "battery_connection_zinvolt": {
+        "title": "Configura la bateria {battery_num} — Connexió (Zinvolt)",
+        "description": "Selecciona la bateria Zinvolt de la integració Zinvolt de Home Assistant per a la bateria {battery_num}. Requereix Home Assistant 2026.11 o posterior. Desactiva altres automatitzacions que canviïn el mode o els límits de potència de Zinvolt.",
+        "data": {
+          "name": "Nom",
+          "zinvolt_device": "Dispositiu Zinvolt"
+        },
+        "data_description": {
+          "name": "Nom descriptiu per identificar aquesta bateria",
+          "zinvolt_device": "El dispositiu de bateria creat per la integració Zinvolt (no una unitat de pack)"
         }
       },
       "battery_limits": {
@@ -1315,6 +1352,7 @@
       "huawei_solar_missing": "Without direct Modbus writes, Omnibattery controls the battery through the Huawei Solar integration's services — but that integration is not set up here. Install and configure it via HACS, or enable direct writes.",
       "huawei_device_mismatch": "The chosen battery device belongs to a different inverter than the Modbus address points at. With cascaded inverters the readings would come from one unit while the commands landed on another. Check the device and the slave id.",
       "esphome_entities_missing": "Al dispositiu ESPHome seleccionat li falten entitats necessàries: {missing}. Assegura't que executa el firmware marstek-lilygo-rs485 amb els noms d'entitat originals.",
+      "zinvolt_entities_missing": "Al dispositiu Zinvolt seleccionat li falten entitats necessàries: {missing}. Selecciona el dispositiu principal de la bateria, fes servir Home Assistant 2026.11 o posterior i activa aquestes entitats.",
       "sensor_not_found": "El sensor de predicció solar no existeix. Verifica que el sensor estigui disponible.",
       "invalid_unit": "El sensor de predicció solar ha de tenir com a unitat 'kWh' o 'Wh'.",
       "solar_production_sensor_not_found": "El sensor de producció solar no existeix. Verifica que el sensor estigui disponible.",

@@ -19,6 +19,7 @@ Drivers:
   - ``hoymiles``: HA MQTT based, push telemetry (MS-A2).
   - ``huawei``: native Modbus-TCP telemetry, set-points via huawei_solar
     services (SUN2000 + LUNA2000).
+  - ``zinvolt``: HA-entity based, via the core zinvolt cloud integration.
 
 See ``docs/plans/driver_abstraction.md`` for the phased extraction plan.
 """
@@ -38,6 +39,7 @@ from .anker import AnkerModbusDriver
 from .sessy import SessyLocalDriver
 from .hoymiles import HoymilesMqttDriver
 from .huawei import HuaweiSolarDriver
+from .zinvolt import ZinvoltEntityDriver
 
 __all__ = [
     "DELIVERED_AC_POWER_KEY",
@@ -53,4 +55,5 @@ __all__ = [
     "SessyLocalDriver",
     "HoymilesMqttDriver",
     "HuaweiSolarDriver",
+    "ZinvoltEntityDriver",
 ]

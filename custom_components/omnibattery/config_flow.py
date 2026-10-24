@@ -153,6 +153,7 @@ from .drivers.zendure import (
 )
 from .drivers.anker import AnkerModbusDriver
 from .drivers.sessy import SessyLocalDriver
+from .drivers.zinvolt import ZinvoltEntityDriver
 from .drivers.huawei import HuaweiSolarDriver
 from .drivers.hoymiles import (
     DEFAULT_HOYMILES_MODEL,
@@ -168,6 +169,7 @@ _ANKER_MAX_POWER_W = 3500
 _SESSY_MAX_CHARGE_POWER_W = 2200
 _SESSY_MAX_DISCHARGE_POWER_W = 1700
 _SESSY_DEFAULT_MIN_SOC = 5
+_ZINVOLT_MAX_POWER_W = 2000
 _HOYMILES_MODEL_AUTO = "auto"
 
 
@@ -536,6 +538,26 @@ def _phase_assignment_is_valid(value: Any) -> bool:
     return value in PHASE_VALUES or value == PHASE_UNASSIGNED or value in (None, "")
 
 
+def _zinvolt_schema(name: str, device_id: str | None) -> vol.Schema:
+    """Name plus the core zinvolt device that owns the battery entities."""
+    selector = DeviceSelector(DeviceSelectorConfig(integration="zinvolt"))
+    device = (
+        vol.Required("zinvolt_device", default=device_id)
+        if device_id
+        else vol.Required("zinvolt_device")
+    )
+    return vol.Schema({vol.Required(CONF_NAME, default=name): str, device: selector})
+
+
+def _zinvolt_missing(hass, device_id: str, errors: dict, placeholders: dict) -> bool:
+    """Flag a device whose entities the driver cannot use."""
+    _, missing = ZinvoltEntityDriver.resolve(hass, device_id)
+    if missing:
+        errors["base"] = "zinvolt_entities_missing"
+        placeholders["missing"] = ", ".join(missing)
+    return bool(missing)
+
+
 def _soc_selector_limits(brand: str) -> tuple[int, int, int, int, int, int]:
     """Return minimum and maximum SOC selector bounds and defaults."""
     if brand == "zendure":
@@ -544,7 +566,7 @@ def _soc_selector_limits(brand: str) -> tuple[int, int, int, int, int, int]:
         min_lo, min_hi, min_default = 0, 20, 10
     elif brand == "sessy":
         min_lo, min_hi, min_default = 0, 30, _SESSY_DEFAULT_MIN_SOC
-    elif brand == "hoymiles":
+    elif brand in ("hoymiles", "zinvolt"):
         min_lo, min_hi, min_default = 0, 30, 10
     elif brand == "huawei":
         # The inverter keeps its own discharge cutoff as a backstop; this window
@@ -1608,6 +1630,8 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
                 return await self.async_step_battery_connection_sessy()
             if brand == "huawei":
                 return await self.async_step_battery_connection_huawei()
+            if brand == "zinvolt":
+                return await self.async_step_battery_connection_zinvolt()
             return await self.async_step_battery_connection()
 
         return self.async_show_form(
@@ -1624,6 +1648,7 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
                                 {"value": "sessy", "label": "Sessy"},
                                 {"value": "hoymiles", "label": "Hoymiles MQTT"},
                                 {"value": "huawei", "label": "Huawei SUN2000 + LUNA2000"},
+                                {"value": "zinvolt", "label": "Zinvolt (Home Assistant integration)"},
                             ],
                             mode=SelectSelectorMode.DROPDOWN,
                         )),
@@ -1780,6 +1805,31 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
                         DeviceSelector(DeviceSelectorConfig(integration="esphome")),
                 }
             ),
+            errors=errors,
+            description_placeholders=placeholders,
+        )
+
+    async def async_step_battery_connection_zinvolt(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Step 3b (Zinvolt): pick the battery from the core zinvolt integration."""
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {"battery_num": str(self.battery_index + 1)}
+        if user_input is not None:
+            device_id = user_input["zinvolt_device"]
+            if not _zinvolt_missing(self.hass, device_id, errors, placeholders):
+                self._current_battery_data.update({
+                    CONF_NAME: user_input[CONF_NAME],
+                    # As for ESPHome, the registry device id is the identity.
+                    CONF_HOST: device_id,
+                    CONF_PORT: 0,
+                    "brand": "zinvolt",
+                    "zinvolt_device_id": device_id,
+                })
+                return await self.async_step_battery_limits()
+        return self.async_show_form(
+            step_id="battery_connection_zinvolt",
+            data_schema=_zinvolt_schema(f"Zinvolt {self.battery_index + 1}", None),
             errors=errors,
             description_placeholders=placeholders,
         )
@@ -2139,6 +2189,8 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
         elif brand == "sessy":
             max_charge_power = _SESSY_MAX_CHARGE_POWER_W
             max_discharge_power = _SESSY_MAX_DISCHARGE_POWER_W
+        elif brand == "zinvolt":
+            max_charge_power = max_discharge_power = _ZINVOLT_MAX_POWER_W
         elif brand == "hoymiles":
             max_charge_power, max_discharge_power = _hoymiles_power_ceilings(self._current_battery_data)
         elif brand == "huawei":
@@ -2191,10 +2243,10 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
                     user_input.get(CONF_DC_PV_CONNECTED, True)
                 ) if merged.get(CONF_BATTERY_VERSION) in ("vA", "vD") else False
                 merged[CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED] = (
-                    False if brand in ("zendure", "anker", "sessy", "hoymiles", "huawei")
+                    False if brand in ("zendure", "anker", "sessy", "hoymiles", "huawei", "zinvolt")
                     else user_input.get(CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED, DEFAULT_FULL_CHARGE_VOLTAGE_TAPER_ENABLED)
                 )
-                if brand in ("zendure", "sessy", "hoymiles"):
+                if brand in ("zendure", "sessy", "hoymiles", "zinvolt"):
                     capacity_default = (
                         _hoymiles_capacity_default(self._current_battery_data)
                         if brand == "hoymiles" else 0.0
@@ -2240,9 +2292,9 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
             and self._current_battery_data.get(CONF_BATTERY_VERSION) in ("vA", "vD")
         ):
             _schema[vol.Required(CONF_DC_PV_CONNECTED, default=True)] = BooleanSelector()
-        if brand not in ("zendure", "anker", "sessy", "hoymiles", "huawei"):
+        if brand not in ("zendure", "anker", "sessy", "hoymiles", "huawei", "zinvolt"):
             _schema[vol.Required(CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED, default=DEFAULT_FULL_CHARGE_VOLTAGE_TAPER_ENABLED)] = bool
-        if brand in ("sessy", "zendure"):
+        if brand in ("sessy", "zendure", "zinvolt"):
             # Neither reports a nominal capacity, and leaving it at 0 silently
             # breaks system SOC, cycles, predictive charging and pricing math.
             _schema[vol.Required("battery_capacity_kwh")] = NumberSelector(
@@ -2933,6 +2985,8 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
             return await self.async_step_reconfigure_battery_hoymiles(user_input)
         if current.get("brand", "marstek") == "huawei":
             return await self.async_step_reconfigure_battery_huawei(user_input)
+        if current.get("brand", "marstek") == "zinvolt":
+            return await self.async_step_reconfigure_battery_zinvolt(user_input)
 
         errors = {}
 
@@ -3230,6 +3284,54 @@ class MarstekVenusConfigFlow(LegacyDomainMigrationMixin, ConfigFlow, domain=DOMA
             description_placeholders=placeholders,
         )
 
+
+    async def async_step_reconfigure_battery_zinvolt(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Update the zinvolt device for a battery during reconfiguration."""
+        entry = self._get_reconfigure_entry()
+        current_batteries = entry.data.get("batteries", [])
+        battery_num = self.battery_index + 1
+        current = (
+            current_batteries[self.battery_index]
+            if self.battery_index < len(current_batteries)
+            else {}
+        )
+        errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {"battery_num": str(battery_num)}
+
+        if user_input is not None:
+            device_id = user_input["zinvolt_device"]
+            if not _zinvolt_missing(self.hass, device_id, errors, placeholders):
+                old_host = current.get(CONF_HOST)
+                if old_host and old_host != device_id:
+                    self._migrate_battery_registry_ids(
+                        entry, old_host, current.get(CONF_PORT), device_id, 0
+                    )
+                updated = dict(current)
+                updated[CONF_NAME] = user_input[CONF_NAME]
+                updated[CONF_HOST] = device_id
+                updated[CONF_PORT] = 0
+                updated["zinvolt_device_id"] = device_id
+                self._reconfigure_batteries.append(updated)
+                self.battery_index += 1
+
+                if self.battery_index >= len(current_batteries):
+                    return self.async_update_reload_and_abort(
+                        entry,
+                        data_updates={"batteries": self._reconfigure_batteries},
+                    )
+                return await self.async_step_reconfigure_battery()
+
+        return self.async_show_form(
+            step_id="reconfigure_battery_zinvolt",
+            data_schema=_zinvolt_schema(
+                current.get(CONF_NAME, f"Zinvolt {battery_num}"),
+                current.get("zinvolt_device_id"),
+            ),
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_reconfigure_battery_anker(
         self, user_input: dict[str, Any] | None = None
@@ -4079,6 +4181,8 @@ class OptionsFlowHandler(OptionsFlow):
                 return await self.async_step_battery_connection_sessy()
             if brand == "huawei":
                 return await self.async_step_battery_connection_huawei()
+            if brand == "zinvolt":
+                return await self.async_step_battery_connection_zinvolt()
             if brand == "hoymiles":
                 return await self.async_step_battery_connection_hoymiles()
             return await self.async_step_battery_connection()
@@ -4097,6 +4201,7 @@ class OptionsFlowHandler(OptionsFlow):
                                 {"value": "sessy", "label": "Sessy"},
                                 {"value": "hoymiles", "label": "Hoymiles MQTT"},
                                 {"value": "huawei", "label": "Huawei SUN2000 + LUNA2000"},
+                                {"value": "zinvolt", "label": "Zinvolt (Home Assistant integration)"},
                             ],
                             mode=SelectSelectorMode.DROPDOWN,
                         )),
@@ -4366,6 +4471,38 @@ class OptionsFlowHandler(OptionsFlow):
             description_placeholders=placeholders,
         )
 
+
+    async def async_step_battery_connection_zinvolt(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Pick the core zinvolt device for a battery slot."""
+        errors: dict[str, str] = {}
+        battery_num = self.battery_index + 1
+        placeholders: dict[str, str] = {"battery_num": str(battery_num)}
+        current_batteries = self.config_entry.data.get("batteries", [])
+        current_battery = (
+            current_batteries[self.battery_index]
+            if self.battery_index < len(current_batteries)
+            else {}
+        )
+        if user_input is not None:
+            device_id = user_input["zinvolt_device"]
+            if not _zinvolt_missing(self.hass, device_id, errors, placeholders):
+                self._current_battery_data.update({
+                    CONF_NAME: user_input[CONF_NAME],
+                    CONF_HOST: device_id,
+                    CONF_PORT: 0,
+                    "brand": "zinvolt",
+                    "zinvolt_device_id": device_id,
+                })
+                return await self.async_step_battery_limits()
+        return self.async_show_form(
+            step_id="battery_connection_zinvolt",
+            data_schema=_zinvolt_schema(
+                current_battery.get(CONF_NAME, f"Zinvolt {battery_num}"),
+                current_battery.get("zinvolt_device_id"),
+            ),
+            errors=errors,
+            description_placeholders=placeholders,
+        )
 
     async def async_step_battery_connection_huawei(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         """Configure a Huawei SUN2000 + LUNA2000.
@@ -4725,6 +4862,8 @@ class OptionsFlowHandler(OptionsFlow):
             elif brand == "sessy":
                 max_charge_power = _SESSY_MAX_CHARGE_POWER_W
                 max_discharge_power = _SESSY_MAX_DISCHARGE_POWER_W
+            elif brand == "zinvolt":
+                max_charge_power = max_discharge_power = _ZINVOLT_MAX_POWER_W
             elif brand == "hoymiles":
                 max_charge_power, max_discharge_power = _hoymiles_power_ceilings(self._current_battery_data)
             elif brand == "huawei":
@@ -4791,10 +4930,10 @@ class OptionsFlowHandler(OptionsFlow):
                     user_input.get(CONF_DC_PV_CONNECTED, True)
                 ) if merged.get(CONF_BATTERY_VERSION) in ("vA", "vD") else False
                 merged[CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED] = (
-                    False if brand in ("zendure", "anker", "sessy", "hoymiles", "huawei")
+                    False if brand in ("zendure", "anker", "sessy", "hoymiles", "huawei", "zinvolt")
                     else user_input.get(CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED, DEFAULT_FULL_CHARGE_VOLTAGE_TAPER_ENABLED)
                 )
-                if brand in ("zendure", "sessy", "hoymiles"):
+                if brand in ("zendure", "sessy", "hoymiles", "zinvolt"):
                     capacity_default = (
                         _hoymiles_capacity_default(self._current_battery_data)
                         if brand == "hoymiles" else 0.0
@@ -4902,9 +5041,9 @@ class OptionsFlowHandler(OptionsFlow):
                     default=defaults[CONF_DC_PV_CONNECTED],
                 )
             ] = BooleanSelector()
-        if brand not in ("zendure", "anker", "sessy", "hoymiles", "huawei"):
+        if brand not in ("zendure", "anker", "sessy", "hoymiles", "huawei", "zinvolt"):
             _schema[vol.Required(CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED, default=defaults[CONF_FULL_CHARGE_VOLTAGE_TAPER_ENABLED])] = bool
-        if brand in ("sessy", "zendure"):
+        if brand in ("sessy", "zendure", "zinvolt"):
             saved_capacity = float(defaults["battery_capacity_kwh"])
             capacity_field = (
                 vol.Required("battery_capacity_kwh", default=saved_capacity)

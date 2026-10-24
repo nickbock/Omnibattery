@@ -10810,6 +10810,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             rs485_gateway=battery_config.get(CONF_RS485_GATEWAY, False),
             esphome_device_id=battery_config.get("esphome_device_id"),
             huawei_battery_device_id=battery_config.get("huawei_battery_device_id"),
+            zinvolt_device_id=battery_config.get("zinvolt_device_id"),
             huawei_direct_write=battery_config.get("huawei_direct_write", False),
             huawei_emma_slave_id=battery_config.get("huawei_emma_slave_id"),
             username=battery_config.get(CONF_USERNAME, ""),
